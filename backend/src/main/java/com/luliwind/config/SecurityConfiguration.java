@@ -22,16 +22,15 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.AbstractAuthenticationProcessingFilter;
-import org.springframework.security.web.authentication.AuthenticationFailureHandler;
-import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.*;
+import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
+import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import javax.sql.DataSource;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,6 +43,9 @@ public class SecurityConfiguration {
     @Autowired
     AuthorizeService authorizeService;
 
+    @Autowired
+    private DataSource dataSource; // 确保已配置数据库连接
+
     // 关键1：注入AuthenticationManager
     @Bean
     public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
@@ -53,10 +55,16 @@ public class SecurityConfiguration {
         return builder.build();
     }
 
+
+
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, AuthenticationManager authManager) throws Exception {
-        // 关键2：替换formLogin为自定义JSON过滤器
-        http.addFilterAt(new AbstractAuthenticationProcessingFilter(
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           AuthenticationManager authManager,
+                                           PersistentTokenRepository repository) throws Exception {
+
+
+        http.addFilterAt(
+                new AbstractAuthenticationProcessingFilter(
                 new AntPathRequestMatcher("/api/auth/login", "POST"), authManager) {
 
             { // 初始化处理逻辑
@@ -82,6 +90,8 @@ public class SecurityConfiguration {
                     JSONObject json = JSON.parseObject(req.getInputStream(), JSONObject.class);
                     String username = json.getString("username");
                     String password = json.getString("password");
+                    Boolean rememberMe = json.getBooleanValue("rememberMe");
+                    req.setAttribute("remember-me", rememberMe);
                     return getAuthenticationManager().authenticate(
                             new UsernamePasswordAuthenticationToken(username, password)
                     );
@@ -89,7 +99,8 @@ public class SecurityConfiguration {
                     throw new AuthenticationServiceException("请求解析失败", e);
                 }
             }
-        }, UsernamePasswordAuthenticationFilter.class);
+        },
+        UsernamePasswordAuthenticationFilter.class);
 
         // 核心配置链
         return http
@@ -106,6 +117,12 @@ public class SecurityConfiguration {
                             res.setCharacterEncoding("UTF-8");
                             res.getWriter().write(JSONObject.toJSONString(RestBean.success("登出成功")));
                         })
+                )
+                . rememberMe(remember -> remember
+                .rememberMeParameter("rememberMe") // 与前端字段名一致
+                .tokenRepository(repository) // 持久化存储
+                .tokenValiditySeconds(86400 * 3) // 令牌有效期（3天）
+                .userDetailsService(authorizeService) // 用户查询服务
                 )
                 .csrf(csrf -> csrf.disable())
                 .exceptionHandling(exception -> exception
@@ -159,6 +176,13 @@ public class SecurityConfiguration {
     @Bean
     public BCryptPasswordEncoder passwordEncoder(){
         return  new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public PersistentTokenRepository persistentTokenRepository() {
+        JdbcTokenRepositoryImpl repo = new JdbcTokenRepositoryImpl();
+        repo.setDataSource(dataSource);
+        return repo;
     }
 
 }

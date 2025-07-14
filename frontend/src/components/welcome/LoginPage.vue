@@ -88,10 +88,10 @@
 import { ref } from 'vue';
 import { User, Lock } from '@element-plus/icons-vue';
 import {ElMessage} from "element-plus";
-import {post} from '@/utils/request.js'
+import {post,get} from '@/utils/request.js'
 import router from "@/router/index.js";
 
-console.log("当前域名：", window.location.hostname);
+
 // 表单数据
 const form = ref({
   username: '',
@@ -112,7 +112,8 @@ const handleLogin = () => {
     post('/api/auth/login',{
       username: form.value.username,
       password: form.value.password,
-    },
+      rememberMe: rememberMe.value,
+        },
         ()=>{
       ElMessage.success("登陆成功,欢迎使用!");
       router.push('/index');
@@ -126,6 +127,7 @@ const handleLogin = () => {
           loading.value = false; // 显式重置 loading
         })
   }
+
 };
 </script>
 

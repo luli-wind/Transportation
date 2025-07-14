@@ -79,6 +79,12 @@
             <artifactId>fastjson</artifactId>
             <version>2.0.52</version>
         </dependency>
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <version>4.0.1</version>
+            <scope>provided</scope> <!-- Tomcat自带此库，无需打包 -->
+        </dependency>
     </dependencies>
 
     <build>
